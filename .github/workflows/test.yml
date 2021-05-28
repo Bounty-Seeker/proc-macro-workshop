@@ -15,16 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-         project: [builder, debug, seq, sorted, bitfield]
+        project: [builder, debug, seq, sorted, bitfield]
     steps:
       - uses: actions/checkout@v2
       - name: Test ${{matrix.project}}
         run: cargo test --verbose
         working-directory: ${{matrix.project}}
-      
-      
-      
-      
-      
-      
-      
