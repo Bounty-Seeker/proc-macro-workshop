@@ -1,17 +1,16 @@
-name: Rust
+name: Test Macros
+# Github action that tests each project on push and pull requests.
 
 on:
   push:
-    branches: [ master ]
   pull_request:
-    branches: [ master ]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-    name: Rust Test ${{matrix.project}}
+    name: rust test ${{matrix.project}}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
