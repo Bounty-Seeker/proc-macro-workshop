@@ -12,5 +12,5 @@ fn tests() {
     // The previous error would have required a bunch of messy parsing and joining of errors with nightly compiler.
     // Will return to this later after more experience.
     t.compile_fail("tests/08-unrecognized-attribute.rs");
-    //t.pass("tests/09-redefined-prelude-types.rs");
+    t.pass("tests/09-redefined-prelude-types.rs");
 }

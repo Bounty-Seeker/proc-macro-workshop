@@ -68,7 +68,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             out_typ = typ;
         }
         else {
-            out_typ = parse2(quote!(Option<#typ>)).unwrap();
+            out_typ = parse2(quote!(std::option::Option<#typ>)).unwrap();
         }
         (out_typ, !is_option)
     }
@@ -106,11 +106,33 @@ pub fn derive(input: TokenStream) -> TokenStream {
             let path_seg = &typ_path.segments;
             let intial_path_seg = path_seg.first().unwrap();
             let intial_path_seg_ident = &intial_path_seg.ident;
+            let intial_path_seg_args = &intial_path_seg.arguments;
             let to_match = Ident::new("Option", intial_path_seg_ident.span());
-            return &to_match == intial_path_seg_ident
+            let ident_match =  &to_match == intial_path_seg_ident;
+            if ident_match {
+                return one_generic_type(intial_path_seg_args);
+            }
         }
         false
     }
+
+    /// Takes &PathArgument and returns bool
+    /// If has only one generic type i.e <T> returns true.
+    /// Returns False otherwise
+    fn one_generic_type(path_args : &PathArguments) -> bool {
+        if let PathArguments::AngleBracketed(gen_args) = path_args {
+            let gen_args = &gen_args.args;
+            if gen_args.len() == 1 {
+                let gen_arg = gen_args.first().unwrap();
+                if let GenericArgument::Type(_) = gen_arg {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
 
     /// Takes a syn::Type and returns a Option<syn::Type>
     ///
@@ -147,8 +169,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
             let path_seg = &typ_path.segments;
             let intial_path_seg = path_seg.first().unwrap();
             let intial_path_seg_ident = &intial_path_seg.ident;
+            let intial_path_seg_args = &intial_path_seg.arguments;
             let to_match = Ident::new("Vec", intial_path_seg_ident.span());
-            return &to_match == intial_path_seg_ident        }
+            let ident_match =  &to_match == intial_path_seg_ident;
+            if ident_match {
+                return one_generic_type(intial_path_seg_args);
+            }     }
         false
     }
 
@@ -518,7 +544,7 @@ fn get_nested(nested : &NestedMeta) -> Option<syn::LitStr> {
 
     let output_build_fn = quote!(
         impl #builder_ident {
-            pub fn build(&mut self) -> Result<#identi, Box<dyn std::error::Error>> {
+            pub fn build(&mut self) -> std::result::Result<#identi, std::boxed::Box<dyn std::error::Error>> {
 
                 #(#get_fields)*
 
