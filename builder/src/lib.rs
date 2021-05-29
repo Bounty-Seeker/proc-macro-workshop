@@ -1,10 +1,12 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TS2;
-use syn::{Data, DeriveInput, Fields, parse_macro_input, Type, parse2, PathArguments, GenericArgument}; //, TypePath, Path, PathSegment};
+use syn::{Data, DeriveInput, Fields, parse_macro_input, Type,
+    parse2, PathArguments, GenericArgument, Meta, Ident, NestedMeta,
+    MetaNameValue, Field, Path, Lit, LitStr, token::Eq}; //, TypePath
 use quote::{quote, format_ident};
 
 
-#[proc_macro_derive(Builder)]
+#[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
 
     // Parse the input tokens into a syntax tree
@@ -133,6 +135,60 @@ pub fn derive(input: TokenStream) -> TokenStream {
         None
     }
 
+    /// Takes a syn::Type and returns a bool
+    ///
+    /// Returns true if input is Vec<T>.
+    /// Returns false otherwise.
+    fn is_vec(typ : &Type) -> bool {
+        if let Type::Path(typ_path) = typ {
+            let typ_path = &typ_path.path;
+            let path_seg = &typ_path.segments;
+            let intial_path_seg = path_seg.first().unwrap();
+            let intial_path_seg_ident = &intial_path_seg.ident;
+            return "Vec" == intial_path_seg_ident.to_string()
+        }
+        false
+    }
+
+    /// Takes a syn::Type and returns a Option<syn::Type>
+    ///
+    /// Returns Some(T) if input is Vec<T>.
+    /// Returns None otherwise.
+    ///
+    fn get_vec_generic(typ : &Type) -> Option<Type> {
+        if let Type::Path(typ_path) = typ {
+            let typ_path = &typ_path.path;
+            let path_seg = &typ_path.segments;
+            let intial_path_seg = path_seg.first().unwrap();
+            let intial_path_seg_ident = &intial_path_seg.ident;
+            if "Vec" == intial_path_seg_ident.to_string() {
+                let option_args = &intial_path_seg.arguments;
+                if let PathArguments::AngleBracketed(option_generic_args) = option_args  {
+                    let option_generic_argument = (option_generic_args.args).first().unwrap();
+                    if let GenericArgument::Type(option_generic_type) = option_generic_argument {
+                        return Some(option_generic_type.to_owned())
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Takes a &Field and returns bool.
+    /// Returns true if attributes contain a correct builder each attribute.
+    /// Returns false otherwise
+    fn has_correct_builder_attribute(fiel: &Field) -> bool {
+        let attr_values = (&fiel.attrs).iter().filter_map(
+                                                                |attr| {
+                                                                    if let Some(nested) = is_builder(&attr.parse_meta().unwrap()) {
+                                                                        return get_nested(nested);
+                                                                    }
+                                                                    return None
+                                                                }
+                                                            );
+        return attr_values.clone().count() >= 1 ;
+    }
+
 
     // Iterator of the names of the field names of struct
     let field_names = fields.clone().map(|field| field.ident.unwrap());
@@ -141,7 +197,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let types_names = fields.clone().map(|field| field.ty);
 
     // Iterator of types that have been optionised with bool
-    let altered_type_names_with_bool = fields.map(|field| optionise(field.ty));
+    let altered_type_names_with_bool = fields.clone().map(|field| optionise(field.ty));
 
     // Iterator of types that have been optionised
     let altered_type_names = altered_type_names_with_bool.clone().map(|(typ, _)| typ);
@@ -151,30 +207,232 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
 
     // create the builder struct
-    let field_names1 = field_names.clone();
-    let altered_type_names1 = altered_type_names;
+    let field1 = fields.clone();
+    //let altered_type_names1 = altered_type_names;
+    let struct_fields = field1.into_iter().map(|fiel| {
+                                                let builder_field_type_name;
+                                                let field_name = fiel.ident.clone().unwrap();
+                                                if has_correct_builder_attribute(&fiel) {
+                                                    builder_field_type_name = fiel.ty;
+                                                } else {
+                                                    builder_field_type_name = optionise(fiel.ty).0;
+                                                }
+                                                quote!(#field_name : #builder_field_type_name)
+                                                });
 
     let output_builder_struct = quote!(
         pub struct #builder_ident {
-            #( #field_names1 : #altered_type_names1 ),*
+            #( #struct_fields ),*
         }
     );
 
 
     // create the builder function
-    let field_names2 = field_names.clone();
+    let field2 = fields.clone();
+    let set_builder_fields = field2.into_iter().map(|fiel| {
+                                                let field_name = fiel.ident.clone().unwrap();
+                                                if has_correct_builder_attribute(&fiel) {
+                                                    quote!(#field_name : Vec::new())
+                                                } else {
+                                                    quote!(#field_name : None)
+                                                }
+                                                });
 
     let output_build_builder = quote!(
         impl #identi {
             pub fn builder() -> #builder_ident {
                 #builder_ident {
-                    #( #field_names2 : None),*
+                    #( #set_builder_fields),*
                 }
             }
         }
     );
 
+    // creates set methods for builder structs
+    let field_names3 = field_names.clone();
 
+    let field3 = fields.clone();
+    let type_names3_removed_option = types_names.map(|typ| { if is_option(&typ) {get_option_generic(&typ).unwrap()} else {typ}});
+
+    let fields_setters = field3.into_iter().map(
+        |fiel| {
+
+            let mut attr_values = fiel.attrs.into_iter()
+                                                            .filter_map(
+                                                                |attr| {
+                                                                    if let Some(nested) = is_builder(&attr.parse_meta().unwrap()) {
+                                                                        return get_nested(nested);
+                                                                    }
+                                                                    return None
+                                                                }
+                                                            );
+
+            // check if more than one builder attribute
+            if attr_values.clone().count() > 1 { panic!() };
+            // for attr in attributes {
+            //     println!("Attr: Path: {:?}", /*attr.path.segments.into_iter().next());
+            //     println!("Tokens: {:?} \n \n", attr.parse_meta().unwrap());
+            //     if let Some(nested) = is_builder(&attr.parse_meta().unwrap()) {
+            //         println!("Is builder \n Nested : {:?} \n", nested);
+            //         println!("extracted value : {:?} \n \n \n", get_nested(nested));
+            //     };
+            //     println!("Tokens: {:?}", attr.parse_meta().unwrap());
+            // }
+            let attr_value = attr_values.next();
+            let field_name = fiel.ident.unwrap();
+            let type_name_removed_option =
+                    {let typ = fiel.ty.clone();
+                    if is_option(&typ)
+                        { get_option_generic(&typ).unwrap() }
+                    else {typ}
+                };
+
+            if let Some(attr_str) = attr_value {
+                let mut setters = TS2::new();
+
+                let attr_ident:Ident = attr_str.parse().unwrap();
+
+                let type_name_remove_vec = {
+                    let typ = fiel.ty;
+                    if is_vec(&typ)
+                        { get_vec_generic(&typ).unwrap() }
+                    else {panic!()}
+                };
+
+                // generate function for each attribute
+                let set_each = quote!(
+                    fn #attr_ident(&mut self, #field_name : #type_name_remove_vec) -> &mut Self {
+                        self.#field_name.push(#field_name);
+                        self
+                    }
+                );
+
+                setters.extend(set_each);
+                if attr_ident != field_name {
+                    let set_total = quote!(
+                        fn #field_name(&mut self, #field_name: #type_name_removed_option) -> &mut Self {
+                            self.#field_name = #field_name;
+                            self
+                        }
+                    );
+                    setters.extend(set_total);
+                }
+                return setters;
+            }
+            else{
+                quote!(
+                    fn #field_name(&mut self, #field_name: #type_name_removed_option) -> &mut Self {
+                        self.#field_name = Some(#field_name);
+                        self
+                    }
+                )
+            }
+        });
+
+    let output_builder_struct_method = quote!(
+        impl #builder_ident {
+            #(#fields_setters)*
+        }
+    );
+
+
+/// Takes a &syn::Meta and returns a Option<&syn::NestedMeta>
+/// Returns None if path does not match expected builder macro or if nested has more than one part.
+/// Returns Some(&Meta) if matching and &NestedMeta points to the nested part which also has only one element.
+///
+///    List(
+///        MetaList { 
+///            path: Path { 
+///                leading_colon: None, 
+///                segments: [
+///                    PathSegment {
+///                        ident: Ident { 
+///                            ident: "builder", 
+///                            span: #0 bytes(298..305) 
+///                        }, 
+///                        arguments: None 
+///                    }
+///                    ] 
+///                }, 
+///            paren_token: Paren,
+///            nested: [
+///                Meta(
+///                    NameValue(
+///                        MetaNameValue { 
+///                            path: Path { 
+///                                leading_colon: None,
+///                                segments: [
+///                                    PathSegment { 
+///                                        ident: Ident { 
+///                                            ident: "each",
+///                                            span: #0 bytes(306..310) 
+///                                        },
+///                                        arguments: None 
+///                                        }
+///                                    ] 
+///                                },
+///                            eq_token: Eq,
+///                            lit: Str(
+///                                LitStr { 
+///                                    token: "env" 
+///                                    }
+///                                )
+///                        }
+///                    )
+///                )
+///            ]
+///        }
+///    )
+fn is_builder(inp : &Meta) -> Option<&NestedMeta> {
+    if let Meta::List(met_list) = inp {
+        let inp_path = &met_list.path;
+        let inp_nested = &met_list.nested;
+        let path_seg = &inp_path.segments;
+        if path_seg.len() != 1 {return None};
+        let intial_path_seg = path_seg.first().unwrap();
+        let intial_path_seg_ident = &intial_path_seg.ident;
+        let to_match = Ident::new("builder", intial_path_seg_ident.span());
+        if to_match != *intial_path_seg_ident { return None }
+        if inp_nested.len() != 1 { return None }
+        return inp_nested.first();
+    }
+    None
+}
+
+/// Takes &NestedMeta and returns Option<syn::LitStr>
+/// returns None if nested doesn't match 'each = "Foo"' form
+/// returns Some(LitStr(_)) for the Foo str.
+fn get_nested(nested : &NestedMeta) -> Option<syn::LitStr> {
+    match nested {
+        NestedMeta::Meta(
+            Meta::NameValue(
+                MetaNameValue {
+                    path: Path {
+                        leading_colon: None,
+                        segments: each_segment
+                        },
+                    eq_token: Eq{..},
+                    lit: Lit::Str( variable_str_lit @
+                        LitStr {..}
+                    )
+                }
+            )
+        )  => {
+            if each_segment.len() != 1 {return None}
+            let each_path_segment = each_segment.first().unwrap();
+            if each_path_segment.arguments != PathArguments::None {return None}
+            let each_ident = &each_path_segment.ident;
+            let to_match = Ident::new("each", each_ident.span());
+            if to_match == *each_ident {
+                return Some(variable_str_lit.clone())
+            }
+            return None;
+        },
+        _ => return None,
+    }
+}
+
+/*
     // creates set methods for builder structs
     let field_names3 = field_names.clone();
     let type_names3_removed_option = types_names.map(|typ| { if is_option(&typ) {get_option_generic(&typ).unwrap()} else {typ}});
@@ -187,8 +445,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 self
             })*
         }
-    );
-
+    );*/
 
     // creates build method
     let field_names4 = field_names.clone();
@@ -196,8 +453,33 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 .map(|iden| format!("{} field is not set!", iden));
     let field_names5 = field_names;
 
-
-    let get_fields = altered_type_names_with_bool.zip(field_names4).zip(field_names_err_msg)
+    // create the builder function
+    let field4 = fields.clone();
+    let get_fields = field4.into_iter().map(|fiel| {
+                                                let has_attribute = has_correct_builder_attribute(&fiel);
+                                                let field_name = fiel.ident.clone().unwrap();
+                                                let field_err_msg = format!("{} field is not set", fiel.ident.clone().unwrap());
+                                                let need_set = optionise(fiel.ty).1;
+                                                if has_attribute {
+                                                    quote!(
+                                                        let #field_name = std::mem::take(&mut self.#field_name);
+                                                        )
+                                                } else if need_set {
+                                                    quote!(
+                                                        let #field_name;
+                                                        match self.#field_name.take() {
+                                                            Some(val) => { #field_name = val },
+                                                            None => { return Err(#field_err_msg.into()); }
+                                                        }
+                                                    )
+                                                }
+                                                else {
+                                                    quote!(
+                                                    let #field_name = self.#field_name.take();
+                                                    )
+                                                }
+                                                });
+/*    let get_fields = altered_type_names_with_bool.zip(field_names4).zip(field_names_err_msg)
                     .map(|(((_field_type, needs_set),field_ident), field_err_msg)| {
                         if needs_set {
                             quote!(
@@ -213,7 +495,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                             let #field_ident = self.#field_ident.take();
                             )
                         }
-                    });
+                    });*/
 
     let output_build_fn = quote!(
         impl #builder_ident {
