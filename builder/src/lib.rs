@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TS2;
 use syn::{Data, DeriveInput, Fields, parse_macro_input, Type,
     parse2, PathArguments, GenericArgument, Meta, Ident, NestedMeta,
-    MetaNameValue, Field, Path, Lit, LitStr, token::Eq}; //, TypePath
+    MetaNameValue, Field, Path, Lit, LitStr, token::Eq, Error};
 use quote::{quote, format_ident};
 
 
@@ -106,7 +106,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
             let path_seg = &typ_path.segments;
             let intial_path_seg = path_seg.first().unwrap();
             let intial_path_seg_ident = &intial_path_seg.ident;
-            return "Option" == intial_path_seg_ident.to_string()
+            let to_match = Ident::new("Option", intial_path_seg_ident.span());
+            return &to_match == intial_path_seg_ident
         }
         false
     }
@@ -122,7 +123,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
             let path_seg = &typ_path.segments;
             let intial_path_seg = path_seg.first().unwrap();
             let intial_path_seg_ident = &intial_path_seg.ident;
-            if "Option" == intial_path_seg_ident.to_string() {
+            let to_match = Ident::new("Option", intial_path_seg_ident.span());
+            if &to_match == intial_path_seg_ident{
                 let option_args = &intial_path_seg.arguments;
                 if let PathArguments::AngleBracketed(option_generic_args) = option_args  {
                     let option_generic_argument = (option_generic_args.args).first().unwrap();
@@ -145,8 +147,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
             let path_seg = &typ_path.segments;
             let intial_path_seg = path_seg.first().unwrap();
             let intial_path_seg_ident = &intial_path_seg.ident;
-            return "Vec" == intial_path_seg_ident.to_string()
-        }
+            let to_match = Ident::new("Vec", intial_path_seg_ident.span());
+            return &to_match == intial_path_seg_ident        }
         false
     }
 
@@ -161,7 +163,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
             let path_seg = &typ_path.segments;
             let intial_path_seg = path_seg.first().unwrap();
             let intial_path_seg_ident = &intial_path_seg.ident;
-            if "Vec" == intial_path_seg_ident.to_string() {
+            let to_match = Ident::new("Vec", intial_path_seg_ident.span());
+            if &to_match == intial_path_seg_ident {
                 let option_args = &intial_path_seg.arguments;
                 if let PathArguments::AngleBracketed(option_generic_args) = option_args  {
                     let option_generic_argument = (option_generic_args.args).first().unwrap();
@@ -183,10 +186,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                                                     if let Some(nested) = is_builder(&attr.parse_meta().unwrap()) {
                                                                         return get_nested(nested);
                                                                     }
-                                                                    return None
+                                                                    None
                                                                 }
                                                             );
-        return attr_values.clone().count() >= 1 ;
+        attr_values.clone().count() >= 1
     }
 
 
@@ -200,7 +203,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let altered_type_names_with_bool = fields.clone().map(|field| optionise(field.ty));
 
     // Iterator of types that have been optionised
-    let altered_type_names = altered_type_names_with_bool.clone().map(|(typ, _)| typ);
+    let _altered_type_names = altered_type_names_with_bool.map(|(typ, _)| typ);
 
     // create ident of our builder
     let builder_ident = format_ident!("{}Builder", identi);
@@ -249,26 +252,42 @@ pub fn derive(input: TokenStream) -> TokenStream {
     );
 
     // creates set methods for builder structs
-    let field_names3 = field_names.clone();
+    let _field_names3 = field_names.clone();
 
     let field3 = fields.clone();
-    let type_names3_removed_option = types_names.map(|typ| { if is_option(&typ) {get_option_generic(&typ).unwrap()} else {typ}});
+    let _type_names3_removed_option = types_names.map(|typ| { if is_option(&typ) {get_option_generic(&typ).unwrap()} else {typ}});
 
     let fields_setters = field3.into_iter().map(
         |fiel| {
 
-            let mut attr_values = fiel.attrs.into_iter()
+            let mut attr_values = (&fiel.attrs).into_iter()
                                                             .filter_map(
                                                                 |attr| {
-                                                                    if let Some(nested) = is_builder(&attr.parse_meta().unwrap()) {
-                                                                        return get_nested(nested);
-                                                                    }
-                                                                    return None
-                                                                }
-                                                            );
+                                                                    let meta = attr.parse_meta().unwrap();
+                                                                    let nested = is_builder(&meta)?;
+                                                                    let attr_span = attr.bracket_token.span;
+                                                                    Some((nested.clone(), attr_span))
+                                                                });
+
+            //if attr_values.clone().count() > 1 { panic!() };
+            let attr_value;
+            //check spelled correctly
+            if let Some((nested, attr_span)) = attr_values.next() {
+                if let Some(str_lit) = get_nested(&nested) {
+                    attr_value = Some(str_lit);
+                } else {
+                    //error
+                    let err = Error::new(attr_span, "expected `builder(each = \"...\")`");
+                    return err.to_compile_error()
+                }
+            } else {
+                attr_value = None;
+            }
 
             // check if more than one builder attribute
-            if attr_values.clone().count() > 1 { panic!() };
+            if attr_values.next().is_some() { panic!() }
+
+
             // for attr in attributes {
             //     println!("Attr: Path: {:?}", /*attr.path.segments.into_iter().next());
             //     println!("Tokens: {:?} \n \n", attr.parse_meta().unwrap());
@@ -278,7 +297,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             //     };
             //     println!("Tokens: {:?}", attr.parse_meta().unwrap());
             // }
-            let attr_value = attr_values.next();
+            //let attr_value = attr_values.next();
             let field_name = fiel.ident.unwrap();
             let type_name_removed_option =
                     {let typ = fiel.ty.clone();
@@ -317,7 +336,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     );
                     setters.extend(set_total);
                 }
-                return setters;
+                setters
             }
             else{
                 quote!(
@@ -426,9 +445,9 @@ fn get_nested(nested : &NestedMeta) -> Option<syn::LitStr> {
             if to_match == *each_ident {
                 return Some(variable_str_lit.clone())
             }
-            return None;
+            None
         },
-        _ => return None,
+        _ => None
     }
 }
 
@@ -448,13 +467,13 @@ fn get_nested(nested : &NestedMeta) -> Option<syn::LitStr> {
     );*/
 
     // creates build method
-    let field_names4 = field_names.clone();
-    let field_names_err_msg = field_names.clone()
+    let _field_names4 = field_names.clone();
+    let _field_names_err_msg = field_names.clone()
                                 .map(|iden| format!("{} field is not set!", iden));
     let field_names5 = field_names;
 
     // create the builder function
-    let field4 = fields.clone();
+    let field4 = fields;
     let get_fields = field4.into_iter().map(|fiel| {
                                                 let has_attribute = has_correct_builder_attribute(&fiel);
                                                 let field_name = fiel.ident.clone().unwrap();

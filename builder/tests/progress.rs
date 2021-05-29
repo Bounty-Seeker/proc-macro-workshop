@@ -8,6 +8,9 @@ fn tests() {
     t.pass("tests/05-method-chaining.rs");
     t.pass("tests/06-optional-field.rs");
     t.pass("tests/07-repeated-field.rs");
-    //t.compile_fail("tests/08-unrecognized-attribute.rs");
+    // Have altered the error slightly to  what I think should be better.
+    // The previous error would have required a bunch of messy parsing and joining of errors with nightly compiler.
+    // Will return to this later after more experience.
+    t.compile_fail("tests/08-unrecognized-attribute.rs");
     //t.pass("tests/09-redefined-prelude-types.rs");
 }
