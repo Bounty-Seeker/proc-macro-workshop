@@ -1,13 +1,30 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TS2;
-use syn::{Attribute, Data, DeriveInput, Fields, LitStr, parse_macro_input};
+use syn::{Attribute, Data, DeriveInput, Fields, LitStr, parse_macro_input, TraitBound, TypeParamBound};
 use quote::quote;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
 
     // Parse the input tokens into a syntax tree
-    let input = parse_macro_input!(input as DeriveInput);
+    let mut input = parse_macro_input!(input as DeriveInput);
+
+
+
+
+    //println!("{:?}", impl_generics);
+
+    let trait_bound = quote!(std::fmt::Debug).into();
+    let trait_bound = parse_macro_input!(trait_bound as TraitBound);
+    //println!("Trait Bound {:?}",&trait_bound);
+    let trait_bound: TypeParamBound = trait_bound.into();
+
+    for param in input.generics.type_params_mut() {
+        //println!("input {:?}", param);
+        param.bounds.extend(std::iter::once(trait_bound.clone()));
+    }
+
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let struct_name_str = input.ident.to_string();
     let struct_name = input.ident;
@@ -39,14 +56,14 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                                         if let Some(attr_value) = attr_iter.next() {
                                                             attr_value
                                                         }
-                                                        else {"\"{}\"".to_string()}
+                                                        else {"{:?}".to_string()}
                                                     });
 
 
     let mut output = TS2::new();
 
     let debug_impl = quote!(
-        impl std::fmt::Debug for #struct_name {
+        impl #impl_generics std::fmt::Debug for #struct_name #ty_generics #where_clause {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 f.debug_struct(#struct_name_str)
                 #(.field(#field_names_str , &std::format_args!(#field_attrs, &self.#field_names)))*
