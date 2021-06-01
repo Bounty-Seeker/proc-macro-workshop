@@ -286,7 +286,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let fields_setters = field3.into_iter().map(
         |fiel| {
 
-            let mut attr_values = (&fiel.attrs).into_iter()
+            let mut attr_values = fiel.attrs.iter()
                                                             .filter_map(
                                                                 |attr| {
                                                                     let meta = attr.parse_meta().unwrap();
