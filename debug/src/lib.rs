@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TS2;
 use syn::{Attribute, Data, DeriveInput, Fields, LitStr, parse_macro_input, TraitBound,
-            TypeParamBound, TypeParam, Type};
+            TypeParamBound, TypeParam, Type, PathArguments, GenericArgument};
 use quote::quote;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
@@ -37,8 +37,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     input.generics.type_params_mut().for_each(|param| {
         //println!("input {:?}", param);
         // Assuming that phantomData<T> only appears when we don't have a T type otherwise
-        // TODO Fix assumption
-        let param_pthan_only = has_param_pthan_field(&param, &fields);
+        let param_pthan_only = only_param_pthan_field(&param, &fields);
         if !param_pthan_only {
             param.bounds.extend(std::iter::once(trait_bound.clone()));
         }
@@ -112,18 +111,95 @@ fn get_attr_value(attr : &Attribute) -> Option<String> {
 }
 
 /// Checks if a type parameter only appears in PhantomData<T>
-/// Only checks if their exists PhantomData<T> as only need such a type when no other type containing T exists.
-fn has_param_pthan_field<'a>(param : &TypeParam, fields : impl IntoIterator<Item=&'a syn::Field>) -> bool {
+fn only_param_pthan_field<'a>(param : &TypeParam, fields : impl IntoIterator<Item=&'a syn::Field>) -> bool {
     let phantom_type_tokens: proc_macro::TokenStream = quote!(PhantomData<#param>).into();
     let phantom_type = parse_macro_input::parse::<Type>(phantom_type_tokens).unwrap();
+
+    let param_ident = &param.ident;
+    let param_tokens: proc_macro::TokenStream = quote!(#param_ident).into();
+    let param_type: Type = parse_macro_input::parse::<Type>(param_tokens).unwrap();
+    println!("{:?}", param_type);
     for field in fields {
         let field_type = &field.ty;
-        if *field_type == phantom_type { return true }
+        if *field_type == phantom_type { continue; }
+        if contains_param_type(&param_type, field_type) { return false; }
     }
-    return false
+    true
 }
 
+//TODO improve and check logic
+fn contains_param_type(param_type: &Type, to_check_against: &Type) -> bool {
+    if param_type == to_check_against { return true; }
+    match to_check_against {
+        Type::Array(type_array) => { contains_param_type(param_type,&type_array.elem) }
+        Type::BareFn(type_bare_fn) => {
+            let function_args = &type_bare_fn.inputs;
+            for function_arg in function_args {
+                if contains_param_type(param_type, &function_arg.ty) { return true }
+            }
 
+            if let syn::ReturnType::Type(_, return_type) = &type_bare_fn.output {
+                return contains_param_type(param_type,&return_type)
+            }
+            false
+        }
+        Type::Group(type_group) => { contains_param_type(param_type,&type_group.elem) }
+        Type::ImplTrait(_type_impl_trait) => {false}
+        Type::Infer(_type_infer) => { panic!("Can't tell _") }
+        Type::Macro(_type_macro) => { panic!("Can't tell as macro") }
+        Type::Never(_type_never) => { false}
+        Type::Paren(type_paren) => { contains_param_type(param_type,&type_paren.elem) }
+        Type::Path(type_path) => {
+            for segments in &type_path.path.segments {
+
+                match &segments.arguments {
+                    PathArguments::None => continue,
+                    PathArguments::AngleBracketed(args) => {
+                        let args = &args.args;
+                        for arg in args {
+                            match arg {
+                            GenericArgument::Lifetime(_lifetime) => continue,
+                            GenericArgument::Type(typ) => {
+                                if contains_param_type(param_type, &typ) { return true; }
+                            }
+                            GenericArgument::Binding(binding) => {
+                                if contains_param_type(param_type, &binding.ty) { return true; }
+                            }
+                            GenericArgument::Constraint(_constraint) => continue,
+                            GenericArgument::Const(_expr) => { panic!("Can't tell as expr") }
+                            }
+                        }
+                    }
+                    PathArguments::Parenthesized(args) => {
+                        let function_args = &args.inputs;
+                        for function_arg in function_args {
+                            if contains_param_type(param_type, &function_arg) { return true }
+                        }
+
+                        if let syn::ReturnType::Type(_, return_type) = &args.output {
+                            return contains_param_type(param_type,&return_type)
+                        }
+                        return false
+                    }
+                }
+            }
+
+            false
+        }
+        Type::Ptr(type_ptr) => { contains_param_type(param_type,&type_ptr.elem) }
+        Type::Reference(type_reference) => { contains_param_type(param_type,&type_reference.elem)}
+        Type::Slice(type_slice) => { contains_param_type(param_type,&type_slice.elem) }
+        Type::TraitObject(_type_trait_object) => { false }
+        Type::Tuple(type_tuple) => {
+            for tuple_term_type in &type_tuple.elems {
+                if contains_param_type(param_type,&tuple_term_type) { return true; }
+            }
+            false
+        }
+        Type::Verbatim(_token_stream) => { panic!("Can't tell as TokenStream") }
+        _ => panic!(),
+    }
+}
 
 
 
