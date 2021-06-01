@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TS2;
-use syn::{Attribute, Data, DeriveInput, Fields, LitStr, parse_macro_input, TraitBound, TypeParamBound};
+use syn::{Attribute, Data, DeriveInput, Fields, LitStr, parse_macro_input, TraitBound,
+            TypeParamBound, TypeParam, Type};
 use quote::quote;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
@@ -10,7 +11,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(input as DeriveInput);
 
 
+    let struct_name_str = input.ident.to_string();
+    let struct_name = input.ident;
 
+    let fields = {
+        match input.data {
+            Data::Struct(
+                syn::DataStruct{
+                    struct_token: _,
+                    fields: Fields::Named(fields),
+                    semi_token: _
+                }
+            ) => { fields.named }
+            _ => { panic!() }
+        }
+    };
 
     //println!("{:?}", impl_generics);
 
@@ -19,31 +34,18 @@ pub fn derive(input: TokenStream) -> TokenStream {
     //println!("Trait Bound {:?}",&trait_bound);
     let trait_bound: TypeParamBound = trait_bound.into();
 
-    for param in input.generics.type_params_mut() {
+    input.generics.type_params_mut().for_each(|param| {
         //println!("input {:?}", param);
-        param.bounds.extend(std::iter::once(trait_bound.clone()));
-    }
+        // Assuming that phantomData<T> only appears when we don't have a T type otherwise
+        // TODO Fix assumption
+        let param_pthan_only = has_param_pthan_field(&param, &fields);
+        if !param_pthan_only {
+            param.bounds.extend(std::iter::once(trait_bound.clone()));
+        }
+    });
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let struct_name_str = input.ident.to_string();
-    let struct_name = input.ident;
-
-    let fields = {
-        match input.data {
-            Data::Struct(struct_data) => {
-                match struct_data {
-                    syn::DataStruct{
-                        struct_token: _,
-                        fields: Fields::Named(fields),
-                        semi_token: _
-                    } => { fields.named }
-                    _ => { panic!() }
-                }
-            }
-            _ => { panic!() }
-        }
-    };
 
     let field_names = fields.clone().into_iter().map(|field| field.ident.unwrap());
 
@@ -109,10 +111,17 @@ fn get_attr_value(attr : &Attribute) -> Option<String> {
     }
 }
 
-
-
-
-
+/// Checks if a type parameter only appears in PhantomData<T>
+/// Only checks if their exists PhantomData<T> as only need such a type when no other type containing T exists.
+fn has_param_pthan_field<'a>(param : &TypeParam, fields : impl IntoIterator<Item=&'a syn::Field>) -> bool {
+    let phantom_type_tokens: proc_macro::TokenStream = quote!(PhantomData<#param>).into();
+    let phantom_type = parse_macro_input::parse::<Type>(phantom_type_tokens).unwrap();
+    for field in fields {
+        let field_type = &field.ty;
+        if *field_type == phantom_type { return true }
+    }
+    return false
+}
 
 
 
