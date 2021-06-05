@@ -1,7 +1,6 @@
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TS2;
-use syn::{Attribute, Data, DeriveInput, Fields, LitStr, parse_macro_input, TraitBound,
-            TypeParamBound, TypeParam, Type, PathArguments, GenericArgument};
+use proc_macro2::{TokenStream as TS2, Span};
+use syn::{Attribute, Data, DeriveInput, Fields, GenericArgument, Ident, LitStr, Path, PathArguments, PathSegment, ReturnType, TraitBound, Type, TypeParam, TypeParamBound, TypePath, WherePredicate, parse_macro_input, punctuated::Punctuated, token::{Comma, Colon2}};
 use quote::quote;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
@@ -34,19 +33,55 @@ pub fn derive(input: TokenStream) -> TokenStream {
     //println!("Trait Bound {:?}",&trait_bound);
     let trait_bound: TypeParamBound = trait_bound.into();
 
+    let mut associated_types_vec = Vec::new();
+
     input.generics.type_params_mut().for_each(|param| {
         //println!("input {:?}", param);
         // Assuming that phantomData<T> only appears when we don't have a T type otherwise
         let param_pthan_only = only_param_pthan_field(&param, &fields);
+        //println!("Only phantom {:?} for {:?}", param_pthan_only, param.ident);
         if !param_pthan_only {
-            param.bounds.extend(std::iter::once(trait_bound.clone()));
+            //param.bounds.extend(std::iter::once(trait_bound.clone()));
+
+            //println!("Hi");
+
+            //TODO move to own function
+            for field in &fields {
+
+                //println!("Hello");
+                let assoc_types = find_assoc_types(&param.ident, &field.ty);
+
+                associated_types_vec.extend(assoc_types);
+            }
         }
     });
+
+    let assoc_where_pred = associated_types_vec.into_iter().map(|typ| {
+
+        let mut type_bound = Punctuated::new();
+        type_bound.extend(std::iter::once(trait_bound.clone()));
+        let assoc_pred_typ = syn::PredicateType{
+            lifetimes : None,
+            bounded_ty: typ,
+            colon_token: syn::token::Colon{spans:[Span::call_site()]},
+            bounds : type_bound
+        };
+        WherePredicate::Type(assoc_pred_typ)
+    });
+    //println!("jfgjf");
+
+    let where_clause = input.generics.make_where_clause();
+    let mut predicates: Punctuated<WherePredicate, Comma> = Punctuated::new();
+    predicates.extend(assoc_where_pred);
+    //println!("predicates {:?}", predicates);
+    where_clause.predicates = predicates;
+
+    //println!("where : {:?}", where_clause);
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
 
-    let field_names = fields.clone().into_iter().map(|field| field.ident.unwrap());
+    let field_names = fields.clone().into_iter().map(|field| {/*println!("ident");*/ field.ident.unwrap()});
 
     let field_names_str = field_names.clone().map(|field_name| field_name.to_string());
 
@@ -112,45 +147,264 @@ fn get_attr_value(attr : &Attribute) -> Option<String> {
 
 /// Checks if a type parameter only appears in PhantomData<T>
 fn only_param_pthan_field<'a>(param : &TypeParam, fields : impl IntoIterator<Item=&'a syn::Field>) -> bool {
-    let phantom_type_tokens: proc_macro::TokenStream = quote!(PhantomData<#param>).into();
-    let phantom_type = parse_macro_input::parse::<Type>(phantom_type_tokens).unwrap();
-
     let param_ident = &param.ident;
+    //println!("param {:?} \n end", param);
+    //let phantom_type_tokens: proc_macro::TokenStream = quote!(PhantomData<#param_ident>).into();
+    //println!("phan type {:?}", phantom_type_tokens);
+    //let _phantom_type = parse_macro_input::parse::<Type>(phantom_type_tokens).unwrap();
+
+
     let param_tokens: proc_macro::TokenStream = quote!(#param_ident).into();
-    let param_type: Type = parse_macro_input::parse::<Type>(param_tokens).unwrap();
-    println!("{:?}", param_type);
+    //println!("param type");
+    let _param_type: Type = parse_macro_input::parse::<Type>(param_tokens).unwrap();
+    //println!("param_type {:?} \n end", param_type);
     for field in fields {
         let field_type = &field.ty;
-        if *field_type == phantom_type { continue; }
-        if contains_param_type(&param_type, field_type) { return false; }
+
+
+        //Does field type contain param
+        let field_contains_param = contains_param_type(&param_ident, field_type);
+
+        //println!("Field {:?} \n contains param {:?} \n is {}\n ",field_type,param_type, field_contains_param);
+        if !field_contains_param {continue;}
+
+        // From here Know the field must contain param
+
+        //println!("field_type {:?} \n end ", field_type);
+        if let Type::Path(type_path) = &field_type {
+            //Possibly PhantomData<T>
+            let path = &type_path.path;
+            let type_ident = &path.segments.first().unwrap().ident;
+
+            let phantom_ident = Ident::new("PhantomData", Span::clone(&type_ident.span()));
+
+            if phantom_ident == *type_ident { continue; }
+            else { return false; }
+
+                //let phantom_match = phantom_ident == segments.ident;
+            
+
+        } else { // Not PhantomData<T> case so if contains T then return false
+            return false;
+        }
+        //if *field_type == phantom_type { continue; }
     }
     true
 }
 
-//TODO improve and check logic
-fn contains_param_type(param_type: &Type, to_check_against: &Type) -> bool {
-    if param_type == to_check_against { return true; }
-    match to_check_against {
-        Type::Array(type_array) => { contains_param_type(param_type,&type_array.elem) }
+
+/// finds generic associated types
+fn find_assoc_types(param_ident : &Ident, field_type : &Type) -> Vec<Type> {
+
+    let mut output_vec = Vec::new();
+
+    // TODO type traits and impl traits and Qself stuff get to work
+    match field_type {
+        Type::Array(type_array) => { find_assoc_types(param_ident, &*type_array.elem) }
         Type::BareFn(type_bare_fn) => {
             let function_args = &type_bare_fn.inputs;
             for function_arg in function_args {
-                if contains_param_type(param_type, &function_arg.ty) { return true }
+                let input_arg_assoc_types = find_assoc_types(param_ident, &function_arg.ty);
+                output_vec.extend(input_arg_assoc_types);
             }
 
             if let syn::ReturnType::Type(_, return_type) = &type_bare_fn.output {
-                return contains_param_type(param_type,&return_type)
+                let output_arg_assoc_types = find_assoc_types(param_ident, &*return_type);
+                output_vec.extend(output_arg_assoc_types);
+            }
+            output_vec
+        }
+        Type::Group(type_group) => { find_assoc_types(param_ident, &*type_group.elem) }
+        Type::ImplTrait(_type_impl_trait) => { panic!("Can't handle impl traits currently") }
+        Type::Infer(_type_infer) => { output_vec }
+        Type::Macro(_type_macro) => { output_vec }
+        Type::Never(_type_never) => { output_vec }
+        Type::Paren(type_paren) => { find_assoc_types(param_ident, &*type_paren.elem) }
+        Type::Path(type_path) => {
+
+            let mut path_segments_iter = type_path.path.segments.iter();
+
+            while let Some(segment) = path_segments_iter.next() {
+
+                let is_ident = segment.ident == *param_ident;
+
+
+                if is_ident {
+                    let mut associ_path_segs: Punctuated<PathSegment,Colon2> = Punctuated::<PathSegment,Colon2>::new();
+                    associ_path_segs.extend(std::iter::once(segment.clone()));
+                    associ_path_segs.extend(path_segments_iter.cloned());
+                    
+                    //println!("\n \n \n associated path: {:?} \n\n\n", associ_path_segs);
+                    let assoc_path : Path = Path{
+                        leading_colon:None,
+                        segments:associ_path_segs,
+                    };
+                    let type_path = TypePath {
+                        qself:None,
+                        path: assoc_path,
+                    };
+                    let ty:Type = type_path.into();
+                    output_vec.extend(std::iter::once(ty));
+                    return output_vec;
+                }
+
+                let segment_args = &segment.arguments;
+
+                match segment_args {
+                    PathArguments::None => {}
+                    PathArguments::AngleBracketed(angle_bracket) => {
+                        for argument in &angle_bracket.args {
+                            if let GenericArgument::Type(ty) = argument {
+                                let generic_assoc_types = find_assoc_types(param_ident, ty);
+                                output_vec.extend(generic_assoc_types);
+                            }
+                        }
+                    }
+                    PathArguments::Parenthesized(parenthesize) => {
+                        for ty in &parenthesize.inputs {
+                            let generic_assoc_types = find_assoc_types(param_ident, ty);
+                            output_vec.extend(generic_assoc_types);
+                        }
+
+                        if let ReturnType::Type(_, ty) = &parenthesize.output {
+                            let generic_assoc_types = find_assoc_types(param_ident, ty);
+                            output_vec.extend(generic_assoc_types);
+                        }
+                    }
+                }
+
+            }
+
+            output_vec
+        }
+        Type::Ptr(type_ptr) => { find_assoc_types(param_ident, &*type_ptr.elem) }
+        Type::Reference(type_reference) => { find_assoc_types(param_ident, &*type_reference.elem) }
+        Type::Slice(type_slice) => { find_assoc_types(param_ident, &*type_slice.elem) }
+        Type::TraitObject(_type_trait_object) => { panic!("Can't handle dynamic traits currently")  }
+        Type::Tuple(type_tuple) => {
+            for tuple_field in &type_tuple.elems{
+                let tuple_assoc_types = find_assoc_types(param_ident, tuple_field);
+                output_vec.extend(tuple_assoc_types);
+            }
+            output_vec
+        }
+        Type::Verbatim(_token_stream) => { panic!("Can't find from token_stream") }
+        _ => panic!()
+    }
+
+}
+
+/*
+Path(
+    TypePath {
+        qself: None,
+        path: Path {
+            leading_colon: None,
+            segments: [
+                PathSegment {
+                    ident: Ident {
+                        ident: "Vec",
+                        span: #0 bytes(300..303)
+                    },
+                    arguments: AngleBracketed(
+                        AngleBracketedGenericArguments {
+                            colon2_token: None,
+                            lt_token: Lt,
+                            args: [
+                                Type(
+                                    Path(
+                                        TypePath {
+                                            qself: Some(
+                                                QSelf {
+                                                    lt_token: Lt,
+                                                    ty: Path(
+                                                        TypePath {
+                                                            qself: None,
+                                                            path: Path {
+                                                                leading_colon: None,
+                                                                segments: [
+                                                                    PathSegment {
+                                                                        ident: Ident {
+                                                                            ident: "T",
+                                                                            span: #0 bytes(305..306)
+                                                                        },
+                                                                        arguments: None
+                                                                    }
+                                                                ]
+                                                            }
+                                                        }
+                                                    ),
+                                                    position: 1,
+                                                    as_token: Some(As),
+                                                    gt_token: Gt
+                                                }
+                                            ),
+                                            path: Path {
+                                                leading_colon: None,
+                                                segments: [
+                                                    PathSegment {
+                                                        ident: Ident {
+                                                            ident: "Trait",
+                                                            span: #0 bytes(310..315)
+                                                        },
+                                                        arguments: None
+                                                    },
+                                                    Colon2,
+                                                    PathSegment {
+                                                        ident: Ident {
+                                                            ident: "Value",
+                                                            span: #0 bytes(318..323)
+                                                        },
+                                                        arguments: None
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    )
+                                )
+                            ],
+                            gt_token: Gt
+                        }
+                    )
+                }
+            ]
+        }
+    }
+)
+*/
+
+
+
+
+//TODO improve and check logic
+fn contains_param_type(param_ident: &Ident, to_check_against: &Type) -> bool {
+    //if param_type == to_check_against { return true; }
+    match to_check_against {
+        Type::Array(type_array) => { contains_param_type(param_ident,&type_array.elem) }
+        Type::BareFn(type_bare_fn) => {
+            let function_args = &type_bare_fn.inputs;
+            for function_arg in function_args {
+                if contains_param_type(param_ident, &function_arg.ty) { return true }
+            }
+
+            if let syn::ReturnType::Type(_, return_type) = &type_bare_fn.output {
+                return contains_param_type(param_ident,&return_type)
             }
             false
         }
-        Type::Group(type_group) => { contains_param_type(param_type,&type_group.elem) }
+        Type::Group(type_group) => { contains_param_type(param_ident,&type_group.elem) }
         Type::ImplTrait(_type_impl_trait) => {false}
         Type::Infer(_type_infer) => { panic!("Can't tell _") }
         Type::Macro(_type_macro) => { panic!("Can't tell as macro") }
         Type::Never(_type_never) => { false}
-        Type::Paren(type_paren) => { contains_param_type(param_type,&type_paren.elem) }
+        Type::Paren(type_paren) => { contains_param_type(param_ident,&type_paren.elem) }
         Type::Path(type_path) => {
+
             for segments in &type_path.path.segments {
+
+                let seg_ident = &segments.ident;
+
+                if seg_ident == param_ident { return true }
 
                 match &segments.arguments {
                     PathArguments::None => continue,
@@ -160,10 +414,10 @@ fn contains_param_type(param_type: &Type, to_check_against: &Type) -> bool {
                             match arg {
                             GenericArgument::Lifetime(_lifetime) => continue,
                             GenericArgument::Type(typ) => {
-                                if contains_param_type(param_type, &typ) { return true; }
+                                if contains_param_type(param_ident, &typ) { return true; }
                             }
                             GenericArgument::Binding(binding) => {
-                                if contains_param_type(param_type, &binding.ty) { return true; }
+                                if contains_param_type(param_ident, &binding.ty) { return true; }
                             }
                             GenericArgument::Constraint(_constraint) => continue,
                             GenericArgument::Const(_expr) => { panic!("Can't tell as expr") }
@@ -173,11 +427,11 @@ fn contains_param_type(param_type: &Type, to_check_against: &Type) -> bool {
                     PathArguments::Parenthesized(args) => {
                         let function_args = &args.inputs;
                         for function_arg in function_args {
-                            if contains_param_type(param_type, &function_arg) { return true }
+                            if contains_param_type(param_ident, &function_arg) { return true }
                         }
 
                         if let syn::ReturnType::Type(_, return_type) = &args.output {
-                            return contains_param_type(param_type,&return_type)
+                            return contains_param_type(param_ident,&return_type)
                         }
                         return false
                     }
@@ -186,13 +440,13 @@ fn contains_param_type(param_type: &Type, to_check_against: &Type) -> bool {
 
             false
         }
-        Type::Ptr(type_ptr) => { contains_param_type(param_type,&type_ptr.elem) }
-        Type::Reference(type_reference) => { contains_param_type(param_type,&type_reference.elem)}
-        Type::Slice(type_slice) => { contains_param_type(param_type,&type_slice.elem) }
+        Type::Ptr(type_ptr) => { contains_param_type(param_ident,&type_ptr.elem) }
+        Type::Reference(type_reference) => { contains_param_type(param_ident,&type_reference.elem)}
+        Type::Slice(type_slice) => { contains_param_type(param_ident,&type_slice.elem) }
         Type::TraitObject(_type_trait_object) => { false }
         Type::Tuple(type_tuple) => {
             for tuple_term_type in &type_tuple.elems {
-                if contains_param_type(param_type,&tuple_term_type) { return true; }
+                if contains_param_type(param_ident,&tuple_term_type) { return true; }
             }
             false
         }
@@ -200,6 +454,17 @@ fn contains_param_type(param_type: &Type, to_check_against: &Type) -> bool {
         _ => panic!(),
     }
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
