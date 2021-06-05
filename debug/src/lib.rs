@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{TokenStream as TS2, Span};
-use syn::{Attribute, Data, DeriveInput, Fields, GenericArgument, Ident, LitStr, Path, PathArguments, PathSegment, ReturnType, TraitBound, Type, TypeParam, TypeParamBound, TypePath, WherePredicate, parse_macro_input, punctuated::Punctuated, token::{Comma, Colon2}};
+use syn::{Attribute, Data, DeriveInput, Error, Fields, GenericArgument, Ident, LitStr, Meta, MetaList, MetaNameValue, NestedMeta, Path, PathArguments, PathSegment, ReturnType, TraitBound, Type, TypeParam, TypeParamBound, TypePath, WherePredicate, parse_macro_input, punctuated::Punctuated, token::{Comma, Colon2}};
 use quote::quote;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
@@ -34,6 +34,16 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let trait_bound: TypeParamBound = trait_bound.into();
 
     let mut associated_types_vec = Vec::new();
+
+    let mut attr_bounds = Vec::new();
+
+    for attr in &input.attrs {
+        let attr_bound= try_attribute(attr);
+
+        if let Some(attr_bound) = attr_bound {
+            attr_bounds.push(attr_bound);
+        }
+    }
 
     input.generics.type_params_mut().for_each(|param| {
         //println!("input {:?}", param);
@@ -69,13 +79,18 @@ pub fn derive(input: TokenStream) -> TokenStream {
         WherePredicate::Type(assoc_pred_typ)
     });
     //println!("jfgjf");
-
     let where_clause = input.generics.make_where_clause();
+
     let mut predicates: Punctuated<WherePredicate, Comma> = Punctuated::new();
-    predicates.extend(assoc_where_pred);
+
+    if attr_bounds.is_empty() {
+        predicates.extend(assoc_where_pred);
+
+    } else {
+        predicates.extend(attr_bounds.into_iter());
+    }
     //println!("predicates {:?}", predicates);
     where_clause.predicates = predicates;
-
     //println!("where : {:?}", where_clause);
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -292,6 +307,108 @@ fn find_assoc_types(param_ident : &Ident, field_type : &Type) -> Vec<Type> {
         _ => panic!()
     }
 
+}
+
+fn try_attribute(attr : &Attribute) -> Option<WherePredicate> {
+
+    //println!("{:?}", attr.parse_meta());
+    //let mut output = Vec::new();
+
+    let meta = attr.parse_meta();
+    let meta = match meta {
+        Ok(meta) => meta,
+        Err(_) => return None
+    };
+
+    //println!("{:?}", meta);
+
+    let meta = match meta {
+        Meta::List(meta) => meta,
+        _ => return None
+    };
+
+
+    let MetaList {
+        path,
+        paren_token: _,
+        nested,
+    } = meta;
+
+    if let syn::Path{
+        leading_colon:None,
+        segments
+    } = path {
+        if !(segments.len() == 1) { return None }
+
+        let segment = segments.first().unwrap();
+
+        if let PathSegment{
+            ident,
+            arguments: PathArguments::None,
+        } = segment {
+            let match_ident = Ident::new("debug", ident.span());
+            if !(match_ident == *ident) {
+                    return None
+            }
+            //let args = attr.parse_args();
+            //println!()
+        }
+
+        //println!("Found debug \n\n\n");
+
+        for nest in nested {
+
+            if let NestedMeta::Meta(
+                Meta::NameValue(name_value)
+            ) = nest {
+
+                let MetaNameValue{
+                    path,
+                    eq_token:_,
+                    lit
+                } = name_value;
+
+                if let syn::Path{
+                    leading_colon:None,
+                    segments
+                } = path {
+                    if !(segments.len() == 1) { return None }
+            
+                    let segment = segments.first().unwrap();
+            
+                    if let PathSegment{
+                        ident,
+                        arguments: PathArguments::None,
+                    } = segment {
+                        let match_ident = Ident::new("bound", ident.span());
+                        if !(match_ident == *ident) {
+                                return None
+                        }
+                    }
+                }
+
+                //println!("Found bound \n\n\n");
+
+                if let syn::Lit::Str(lit) = lit {
+                    //println!("Found lit {:?} \n\n\n", &lit.value()[..]);
+
+                    let parse_attempt: Result<WherePredicate,Error> = syn::parse_str(&lit.value()[..]);
+                    //println!("{:?}", parse_attempt);
+                    match parse_attempt {
+                        Ok(trait_bound) => { //println!("Found parse \n\n\n");
+                        return Some(trait_bound) }
+                        _ => { //println!("Not parsed \n\n\n");
+                        return None }
+                    }
+                } else { return None; }
+
+            } else { continue; }
+
+        }
+
+    }
+
+    None
 }
 
 /*
