@@ -19,13 +19,17 @@ pub fn sorted(args: TokenStream, input: TokenStream) -> TokenStream {
     let input_item : Item = parse_macro_input!(input as Item);
 
     // enum_sorted
-    let output = sorted_macro(&input_item);
+    let is_sorted = sorted_macro(&input_item);
 
     // Create output
-    match output {
-        Ok(()) => input_item.into_token_stream().into(),
-        Err(err) => { err.into_compile_error().into() }
+    let mut output : TS2 = input_item.into_token_stream();
+
+    match is_sorted {
+        Ok(()) => {},
+        Err(err) => { output.extend(err.into_compile_error()) }
     }
+
+    output.into()
 }
 
 /// Checks if Item is enum
