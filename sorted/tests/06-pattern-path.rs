@@ -5,7 +5,7 @@
 //
 // Ensure that patterns consisting of a path are correctly tested for
 // sortedness. These patterns will be of type Pat::Path, Pat::TupleStruct, or
-// Pat::Struct.
+// Pat::Ident.
 //
 //
 // Resources:
