@@ -9,8 +9,8 @@ pub fn seq(input: TokenStream) -> TokenStream {
 
 
 
-    let mut output = parsed_seq.create_tokenstream();
-    output.extend(parsed_seq.create_tokenstream());
+    let output = parsed_seq.create_tokenstream();
+    //output.extend(parsed_seq.create_tokenstream());
     //dbg!("{:?}", &output);
     output.into()
 }
