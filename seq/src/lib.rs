@@ -10,33 +10,40 @@ pub fn seq(input: TokenStream) -> TokenStream {
 
 
     let output = TS2::new();
+    //output.extend(_parsed_seq.contents);
+    //dbg!("{:?}", &output);
     output.into()
 }
 
 
 mod seq_parsing {
 use syn::{Ident, Token, braced, parse::Parse, token::Brace};
+use proc_macro2::TokenStream;
 
     pub struct SeqParsed {
-        initial_ident:Ident,
-        in_token: Token![in],
-        start_val : syn::LitInt,
-        dot2 : Token![..],
-        end_val : syn::LitInt,
-        braced : Brace,
+        pub initial_ident:Ident,
+        pub in_token: Token![in],
+        pub start_val : syn::LitInt,
+        pub dot2 : Token![..],
+        pub end_val : syn::LitInt,
+        pub braced : Brace,
+        pub contents: TokenStream,
     }
 
     impl Parse for SeqParsed {
         fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-            let _content;
-        Ok(SeqParsed{
+            let content;
+        let parsed = Ok(SeqParsed{
             initial_ident: input.parse()?,
             in_token: input.parse()?,
             start_val:input.parse()?,
             dot2: input.parse()?,
             end_val:input.parse()?,
-            braced: braced!(_content in input),
-        })
+            braced: braced!(content in input),
+            contents : content.parse()?,
+        });
+        dbg!("content: {:?}", content);
+        parsed
     }
     }
 }
