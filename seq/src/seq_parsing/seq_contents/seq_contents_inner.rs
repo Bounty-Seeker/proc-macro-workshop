@@ -1,6 +1,4 @@
-//use proc_macro2::Ident;
 use proc_macro2::TokenStream;
-//use syn::parse::Parse;
 use seq_inner_tokens::SeqTokens;
 use syn::parse::ParseStream;
 use syn::{Result};
@@ -11,33 +9,13 @@ mod seq_inner_tokens;
 #[derive(Debug)]
 pub struct InnerSeqContent {
     contents: Vec<SeqTokens>,
-    //ident : Ident
 }
-
-/*impl Parse for InnerSeqContent {
-    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-
-        let mut out_vec = Vec::new();
-
-        while !input.is_empty() {
-            let token : SeqTokens = input.parse()?;
-            out_vec.push(token);
-            println!("parsed so far {:?}\n\n\n", out_vec);
-        }
-        println!("parse created innerseqcontent");
-
-        Ok(InnerSeqContent{
-            contents : out_vec,
-        })
-    }
-}*/
-
 
 impl InnerSeqContent {
 
     pub fn create_parser(id : Ident) -> impl Fn(ParseStream<'_>) -> Result<Self> {
 
-        let output_fn = move |input:ParseStream<'_>| {
+        move |input:ParseStream<'_>| {
 
             let mut out_vec = Vec::new();
 
@@ -48,18 +26,13 @@ impl InnerSeqContent {
             while !input.is_empty() {
                 let token : SeqTokens = token_parser(input)?;
                 out_vec.push(token);
-                println!("parsed so far {:?}\n\n\n", out_vec);
             }
-            println!("parse created innerseqcontent");
 
             Ok(InnerSeqContent{
                 contents : out_vec,
-                //ident: id.clone(),
             })
 
-        };
-
-        output_fn
+        }
     }
 
     /// generate output token stream in case when we have only repeated groups
@@ -86,7 +59,7 @@ impl InnerSeqContent {
         val: u128,
         ident_to_match: &Ident,
     ) -> syn::Result<TokenStream> {
-        println!("started generating");
+        //println!("started generating");
         let mut output = TokenStream::new();
 
         // for each value generate the token stream
@@ -95,14 +68,13 @@ impl InnerSeqContent {
             output.extend(token_out);
         }
 
-        println!("generating {}", output);
+        //println!("generating {}", output);
         Ok(output)
     }
 
 
     /// validate that the tokenstream repeats all r only some sections
     pub fn validate(&self,  cur_mode: &mut Option<SeqMode>)  -> syn::Result<()> {
-
 
         // for each token validate
         for token in &self.contents {
@@ -113,9 +85,6 @@ impl InnerSeqContent {
         Ok(())
     }
 
-    /*fn span(&self) -> Span {
-        self.span
-    }*/
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

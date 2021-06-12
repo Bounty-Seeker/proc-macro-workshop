@@ -1,4 +1,4 @@
-use super::{SeqMode};
+use super::SeqMode;
 use proc_macro2::Ident;
 use proc_macro2::{TokenStream, TokenTree};
 use syn::Token;
@@ -13,26 +13,11 @@ pub struct AlteredIdent {
     ident_after_hash: Ident,
 }
 
-/*
-impl Parse for AlteredIdent {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let ident_before_hash : Ident = input.parse()?;
-        let hash : Token!(#) = input.parse()?;
-        let ident_after_hash : Ident = input.parse()?;
-
-        Ok(AlteredIdent{
-            ident_before_hash,
-            _hash:hash,
-            ident_after_hash,
-        })
-    }
-}*/
-
 impl AlteredIdent {
 
     pub fn create_parser<'a>(id : Ident) -> impl Fn(ParseStream<'a>) -> Result<Self> {
 
-        let output_fn = move |input:ParseStream<'_>| {
+        move |input:ParseStream<'_>| {
 
             let ident_before_hash : Ident = input.parse()?;
             let hash : Token!(#) = input.parse()?;
@@ -51,9 +36,7 @@ impl AlteredIdent {
                 ident_after_hash,
             })
 
-        };
-
-        output_fn
+        }
     }
 
     /// generate output token stream in case when we are repeating whole contents

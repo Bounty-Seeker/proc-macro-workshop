@@ -1,8 +1,8 @@
-use super::{SeqMode};
+use super::SeqMode;
 use proc_macro2::Ident;
-use proc_macro2::{TokenStream};
+use proc_macro2::TokenStream;
 use syn::parse::ParseStream;
-use syn::token::{Paren};
+use syn::token::Paren;
 use syn::{Error, Token, parenthesized, Result};
 use super::super::InnerSeqContent;
 
@@ -14,29 +14,11 @@ pub struct RepeatedGroup {
     _ask : Token!(*),
 }
 
-/*
-impl Parse for RepeatedGroup {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let hash : Token!(#) = input.parse()?;
-        let content;
-        let paren =  parenthesized!(content in input);
-        let contents : InnerSeqContent = content.parse()?;
-        let ask : Token!(*) = input.parse()?;
-
-        Ok(RepeatedGroup{
-            hash,
-            _paren:paren,
-            contents,
-            _ask:ask,
-        })
-    }
-}*/
-
 impl RepeatedGroup {
 
     pub fn create_parser<'a>(id : Ident) -> impl Fn(ParseStream<'a>) -> Result<Self> {
 
-        let output_fn = move |input:ParseStream<'_>| {
+        move |input:ParseStream<'_>| {
 
             let hash : Token!(#) = input.parse()?;
             let content;
@@ -52,9 +34,7 @@ impl RepeatedGroup {
                 _ask:ask,
             })
 
-        };
-
-        output_fn
+        }
     }
 
     /// generate output token stream in case when we have only repeated groups

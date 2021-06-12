@@ -11,7 +11,7 @@ use seq_matching_ident::MatIdent;
 use seq_my_ident::MyIdent;
 
 use syn::parse::ParseStream;
-use syn::{Result};
+use syn::Result;
 
 mod seq_altered_ident;
 mod seq_repeated_group;
@@ -31,11 +31,11 @@ mod seq_my_ident {
 
         fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
 
-            println!("Trying parse as ident");
+            // println!("Trying parse as ident");
 
             let ident = input.call(syn::Ident::parse_any)?;
 
-            println!("Found ident {:?}", ident);
+            // println!("Found ident {:?}", ident);
             Ok(MyIdent{
                 ident
             })
@@ -76,61 +76,6 @@ pub enum SeqTokens {
     AlteredIdent(AlteredIdent),
 }
 
-/*
-impl Parse for SeqTokens {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-
-        println!("Token parsing {:?}", input);
-
-        // try parse as altered ident
-        if input.fork().parse::<AlteredIdent>().is_ok() {
-            let alt_id = input.parse().map(SeqTokens::AlteredIdent);
-            println!("parse alt id");
-            return alt_id;
-        }
-
-        // try parse as repeated group
-        if input.fork().parse::<RepeatedGroup>().is_ok() {
-            let rep_group = input.parse().map(SeqTokens::RepeatedGroup);
-            println!("parse rep group");
-            return rep_group;
-        }
-
-        // try parse as standard group
-        if input.fork().parse::<TTGroup>().is_ok() {
-            let std_group = input.parse().map(SeqTokens::TTGroup);
-            println!("parse std group");
-            return std_group;
-        }
-
-        // try parse as standard ident
-        if input.fork().parse::<Ident>().is_ok() {
-            let id = input.parse().map(SeqTokens::TTIden);
-            println!("parse std id");
-            return id;
-        }
-
-        // try parse as punc
-        if input.fork().parse::<Punct>().is_ok() {
-            let punc = input.parse().map(SeqTokens::TTPunc);
-            println!("parse punc");
-            return punc;
-        }
-
-
-        // try parse as lit
-        if input.fork().parse::<Literal>().is_ok() {
-            let lit = input.parse().map(SeqTokens::TTLit);
-            println!("parse lit");
-            return lit;
-        }
-
-        println!("parse failed");
-
-        let err = input.error("Expected a SeqToken");
-        Err(err)
-    }
-}*/
 
 impl SeqTokens {
 
@@ -138,78 +83,79 @@ impl SeqTokens {
 
         move |input : ParseStream<'_>| {
 
-            println!("Token parsing seqtokens {:?}", input);
+            //println!("Token parsing seqtokens {:?}", input);
 
-            println!("try parse alt id");
+            //println!("try parse alt id");
 
             // try parse as altered ident
             let forked_buf = input.fork();
             let alt_ident_parser = AlteredIdent::create_parser(id.clone());
             if alt_ident_parser(&forked_buf).is_ok() {
                 let alt_id = alt_ident_parser(input).map(SeqTokens::AlteredIdent);
-                println!("parse alt id");
+                //println!("parse alt id");
                 return alt_id;
             }
     
-            println!("try parse rep group id");
+            //println!("try parse rep group id");
             // try parse as repeated group
             let forked_buf = input.fork();
             let rep_group_parser = RepeatedGroup::create_parser(id.clone());
             if rep_group_parser(&forked_buf).is_ok() {
                 let rep_group = rep_group_parser(input).map(SeqTokens::RepeatedGroup);
-                println!("parse rep group");
+                //println!("parse rep group");
                 return rep_group;
             }
 
-            println!("try parse matching id");
+            //println!("try parse matching id");
 
             // try parse as matching ident
             let forked_buf = input.fork();
             let match_id_parser = MatIdent::create_parser(id.clone());
             if match_id_parser(&forked_buf).is_ok() {
                 let match_id = match_id_parser(input).map(SeqTokens::TTMatIden);
-                println!("parse match id");
+                //println!("parse match id");
                 return match_id;
             }
 
 
-            println!("try parse std group");
+            //println!("try parse std group");
             // try parse as standard group
             let forked_buf = input.fork();
             let std_group_parser = TTGroup::create_parser(id.clone());
             if std_group_parser(&forked_buf).is_ok() {
                 let std_group = std_group_parser(input).map(SeqTokens::TTGroup);
-                println!("parse std group");
+                //println!("parse std group");
                 return std_group;
             }
     
-            println!("try parse std id");
+            //println!("try parse std id");
             // try parse as standard ident
             if input.fork().parse::<MyIdent>().is_ok() {
                 let id = input.parse().map(SeqTokens::TTIden);
-                println!("parse std id");
+                //println!("parse std id");
                 return id;
             }
     
-            println!("try parse punc");
+            //println!("try parse punc");
 
             // try parse as punc
             if input.fork().parse::<Punct>().is_ok() {
                 let punc = input.parse().map(SeqTokens::TTPunc);
-                println!("parse punc");
+                //println!("parse punc");
                 return punc;
             }
     
     
-            println!("try parse lit");
+            //println!("try parse lit");
+
             // try parse as lit
             if input.fork().parse::<Literal>().is_ok() {
                 let lit = input.parse().map(SeqTokens::TTLit);
-                println!("parse lit");
+                //println!("parse lit");
                 return lit;
             }
     
-            println!("parse failed");
+            //println!("parse failed");
     
             let err = input.error("Expected a SeqToken");
             Err(err)
@@ -317,27 +263,3 @@ impl SeqTokens {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

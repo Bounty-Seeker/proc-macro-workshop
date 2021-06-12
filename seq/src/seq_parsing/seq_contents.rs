@@ -1,8 +1,7 @@
 use proc_macro2::TokenStream;
 use seq_contents_inner::{InnerSeqContent, SeqMode};
-//use syn::parse::Parse;
 use syn::parse::ParseStream;
-use syn::{Result};
+use syn::Result;
 use proc_macro2::Ident;
 
 
@@ -13,35 +12,11 @@ pub struct ValidatedSeqContents {
     seq_contents: InnerSeqContent,
 }
 
-/*
-impl Parse for ValidatedSeqContents {
-    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-
-        // initial parse
-        let inner_seq_content: InnerSeqContent = input.parse()?;
-
-        // Set initial mode
-        let mut mode = None;
-
-        // validate that the tokenstream repeats all or only some sections
-        inner_seq_content.validate(&mut mode)?;
-
-        // if initial mode is still None then no repeated groups so set to Whole
-        let mode = mode.unwrap_or(SeqMode::Whole);
-
-        Ok(ValidatedSeqContents {
-            partial_or_whole: mode,
-            seq_contents: inner_seq_content,
-        })
-    }
-}*/
-
 impl ValidatedSeqContents {
-
 
     pub fn create_parser<'a>(id : Ident) -> impl Fn(ParseStream<'a>) -> Result<Self> {
 
-        let output_fn = move |input:ParseStream<'_>| {
+        move |input:ParseStream<'_>| {
 
             // create parser
             let inner_seq_parser = InnerSeqContent::create_parser(id.clone());
@@ -63,17 +38,8 @@ impl ValidatedSeqContents {
                 seq_contents: inner_seq_content,
             })
 
-        };
-
-        output_fn
+        }
     }
-
-
-
-
-
-
-
 
 
     /// generate output token stream
