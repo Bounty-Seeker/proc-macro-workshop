@@ -19,24 +19,33 @@ pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
 
         let mut output = TokenStream::new();
 
-        let fields_type_iter1 = fields_type_iter.clone();
+        let fields_type_iter1 = fields_type_iter;
+
+        let size = quote!((#(< #fields_type_iter1 as Specifier>::BITS + )* 0));
 
         let struct_ts = quote!(
             #[repr(C)]
-            #[derive(Debug)]
+            //#[derive(Debug)]
             pub struct #struct_id {
-                data : [u8; (#(< #fields_type_iter1 as Specifier>::BITS + )* 0)/8],
+                data : [u8; #size /8],
             }
         );
 
         output.extend(struct_ts);
 
+        let multiple_of_eight_check = checks::generate_multiple_of_eight_bits_check()?;
 
-        let fields_type_iter2 = fields_type_iter;
+        output.extend(multiple_of_eight_check);
+
+        let run_multiple_of_eight_check = checks::generate_multiple_of_eight_run_check(&size)?;
+
+
+        //let fields_type_iter2 = fields_type_iter;
 
         let new_func = quote!(
             fn new() -> Self {
-                let data = [0; (#(< #fields_type_iter2 as Specifier>::BITS + )* 0)/8];
+                #run_multiple_of_eight_check
+                let data = [0; #size /8];
                 #struct_id {
                     data
                 }
@@ -83,6 +92,7 @@ pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
         );
 
         output.extend(impl_funcs);
+
 
         Ok(output)
 
