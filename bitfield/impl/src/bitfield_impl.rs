@@ -69,12 +69,12 @@ pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
 
             // create get function for field
             let get_id = format_ident!("get_{}", field_ident);
-            let get_func = get_functions::create_get_function(get_id, &start_bit, &end_bit)?;
+            let get_func = get_functions::create_get_function(get_id, &start_bit, &end_bit, &field_type)?;
             get_funcs.extend(get_func);
 
             // create set function for field
             let set_id = format_ident!("set_{}", field_ident);
-            let set_func = set_functions::create_set_function(set_id, &start_bit, &end_bit)?;
+            let set_func = set_functions::create_set_function(set_id, &start_bit, &end_bit, &field_type)?;
             set_funcs.extend(set_func);
 
             start_bit = end_bit.clone();

@@ -1,11 +1,14 @@
 use proc_macro2::TokenStream;
-use syn::{Ident, Result};
+use syn::{Ident, Result, Type};
 use quote::quote;
 
-pub fn create_set_function(set_id : Ident, start_bit: &TokenStream, end_bit : &TokenStream) -> Result<TokenStream> {
+pub fn create_set_function(set_id : Ident, start_bit: &TokenStream, end_bit : &TokenStream, field_type : &Type) -> Result<TokenStream> {
 
     let set_func = quote!(
-        fn #set_id (&mut self, inp : u64) {
+        fn #set_id (&mut self, inp : <#field_type as Specifier>::InOutType) {
+
+            // make inp a u64
+            let inp = inp as u64;
         
             let start : usize = #start_bit;
             let end : usize = #end_bit;
@@ -24,8 +27,9 @@ pub fn create_set_function(set_id : Ident, start_bit: &TokenStream, end_bit : &T
             let end_offset = (end % 8) as u32;
         
             // panic if input is too large
-            if inp >= 2u64.pow((end-start) as u32) { panic!("Given input is too large"); }
+            if (inp as u128) >= (2u128.pow(((end as u128)-(start as u128)) as u32) as u128) { panic!("Given input is too large"); }
             //println!("start : {}", start);
+
         
             if start_byte == end_byte {
         
