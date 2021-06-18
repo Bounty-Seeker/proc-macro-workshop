@@ -1,5 +1,5 @@
 use syn::{Result, ItemEnum, Error};
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, Span};
 use quote::quote;
 
 
@@ -21,6 +21,12 @@ pub fn bitfield_specifier_impl(input : ItemEnum) -> Result<TokenStream> {
     if len == 1 {
         // no supported singleton enums
         let err = Error::new(enum_ident.span(), "Single variant Enums are not currently supported!");
+        return Err(err);
+    }
+
+    if len.next_power_of_two() != len  {
+        // enums must have power of 2 fields
+        let err = Error::new(Span::call_site(), "BitfieldSpecifier expected a number of variants which is a power of 2");
         return Err(err);
     }
 
