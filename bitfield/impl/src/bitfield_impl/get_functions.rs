@@ -37,8 +37,8 @@ pub fn create_get_function(get_id : Ident, start_bit: &TokenStream, end_bit : &T
                 // mask and byte then shift
                 let output = (mask & self.data[start_byte]) >> start_offset;
         
-                let output = output as <#field_type as Specifier>::InOutType;
-        
+                let output : <#field_type as Specifier>::InOutType = <#field_type as Specifier>::from_u64(output as u64);
+
                 return output;
             }
         
@@ -79,7 +79,7 @@ pub fn create_get_function(get_id : Ident, start_bit: &TokenStream, end_bit : &T
         
             // return to avoid out of bounds on last field
             if end_offset == 0 {
-                let output = output as <#field_type as Specifier>::InOutType;
+                let output : <#field_type as Specifier>::InOutType = <#field_type as Specifier>::from_u64(output as u64);
                 return output;
             }
         
@@ -96,7 +96,7 @@ pub fn create_get_function(get_id : Ident, start_bit: &TokenStream, end_bit : &T
             // add shifted value to output
             output += shifted_val;
         
-            let output = output as <#field_type as Specifier>::InOutType;
+            let output : <#field_type as Specifier>::InOutType = <#field_type as Specifier>::from_u64(output as u64);
         
             output
         }

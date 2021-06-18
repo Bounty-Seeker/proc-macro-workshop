@@ -10,9 +10,11 @@
 //
 // From the perspective of a user of this crate, they get all the necessary APIs
 // (macro, trait, struct) through the one bitfield crate.
-pub use bitfield_impl::bitfield;
+pub use bitfield_impl::{bitfield, BitfieldSpecifier};
 
+use bitfield_impl::generate_checks;
 use seq_macro::seq;
+use std::convert::TryInto;
 
 // TODO other things
 
@@ -20,6 +22,10 @@ use seq_macro::seq;
 pub trait Specifier {
     const BITS : usize;
     type InOutType;
+
+    fn from_u64(inp : u64) -> Self::InOutType;
+
+    fn to_u64(inp : Self::InOutType) -> u64;
 }
 
 seq!(N in 1..=8 {
@@ -29,6 +35,14 @@ seq!(N in 1..=8 {
     impl Specifier for B#N {
         const BITS : usize = N;
         type InOutType = u8;
+
+        fn from_u64(inp : u64) -> Self::InOutType {
+            inp.try_into().unwrap()
+        }
+
+        fn to_u64(inp : Self::InOutType) -> u64{
+            inp as u64
+        }
     }
 
 });
@@ -40,6 +54,14 @@ seq!(N in 9..=16 {
     impl Specifier for B#N {
         const BITS : usize = N;
         type InOutType = u16;
+
+        fn from_u64(inp : u64) -> Self::InOutType {
+            inp.try_into().unwrap()
+        }
+
+        fn to_u64(inp : Self::InOutType) -> u64{
+            inp as u64
+        }
     }
 
 });
@@ -51,6 +73,14 @@ seq!(N in 17..=32 {
     impl Specifier for B#N {
         const BITS : usize = N;
         type InOutType = u32;
+
+        fn from_u64(inp : u64) -> Self::InOutType {
+            inp.try_into().unwrap()
+        }
+
+        fn to_u64(inp : Self::InOutType) -> u64{
+            inp as u64
+        }
     }
 
 });
@@ -62,6 +92,33 @@ seq!(N in 33..=64 {
     impl Specifier for B#N {
         const BITS : usize = N;
         type InOutType=u64;
+
+        fn from_u64(inp : u64) -> Self::InOutType {
+            inp
+        }
+
+        fn to_u64(inp : Self::InOutType) -> u64{
+            inp as u64
+        }
     }
 
 });
+
+impl Specifier for bool {
+    const BITS : usize = 1;
+    type InOutType = bool;
+
+    fn from_u64(inp : u64) -> Self::InOutType {
+        match inp {
+            0 => false,
+            1 => true,
+            _ => unreachable!()
+        }
+    }
+
+    fn to_u64(inp : Self::InOutType) -> u64{
+        inp.into()
+    }
+}
+
+generate_checks!();

@@ -3,6 +3,12 @@ use syn::{Result, Error};
 use proc_macro2::{TokenStream, Span};
 use quote::{quote, format_ident};
 
+mod get_functions;
+
+mod set_functions;
+
+pub mod checks;
+
 pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
 
     let struct_id = input_struct.ident;
@@ -102,12 +108,6 @@ pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
         Err(err)
     }
 }
-
-mod get_functions;
-
-mod set_functions;
-
-mod checks;
 
 /*
         let run_check = quote! (

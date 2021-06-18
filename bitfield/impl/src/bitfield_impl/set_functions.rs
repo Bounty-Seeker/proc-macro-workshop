@@ -8,7 +8,7 @@ pub fn create_set_function(set_id : Ident, start_bit: &TokenStream, end_bit : &T
         fn #set_id (&mut self, inp : <#field_type as Specifier>::InOutType) {
 
             // make inp a u64
-            let inp = inp as u64;
+            let inp :u64 = <#field_type as Specifier>::to_u64(inp);
         
             let start : usize = #start_bit;
             let end : usize = #end_bit;

@@ -63,10 +63,8 @@ pub fn generate_multiple_of_eight_bits_check() -> Result<TokenStream> {
     output.extend(final_check);
 
     let output = quote!(
-        mod bitfields {
-            pub mod checks{
-            #output
-            }
+        pub mod checks{
+        #output
         }
     );
 
@@ -79,7 +77,7 @@ pub fn generate_multiple_of_eight_run_check(size:&TokenStream) -> Result<TokenSt
     let mut output = TokenStream::new();
 
     let run_check = quote! (
-        let _ :  bitfields::checks::IsMultipleOfEightBits<[(); #size % 8]>;
+        let _ :  bitfield::checks::IsMultipleOfEightBits<[(); #size % 8]>;
     );
 
     output.extend(run_check);
