@@ -43,7 +43,7 @@ pub fn generate_checks(input: TokenStream) -> TokenStream {
     parse_macro_input!(input as Nothing);
 
     // generate output
-    let output = checks::create_tokenstream();
+    let output = checks::create_checks_tokenstream();
 
     // if output is error covert to compiler error and return
     output.unwrap_or_else(|err| err.to_compile_error()).into()

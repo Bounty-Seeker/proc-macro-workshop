@@ -1,13 +1,14 @@
 use syn::{Result, ItemEnum, Error};
 use proc_macro2::{TokenStream, Span};
 use quote::quote;
+use super::bitfield_impl::checks::generate_variant_in_range_run_check;
 
 
 // TODO what if single variant, check path in impl for hygiene, check variants are fieldless.
 pub fn bitfield_specifier_impl(input : ItemEnum) -> Result<TokenStream> {
 
     // get enum id
-    let enum_ident = input.ident;
+    let enum_ident = &input.ident;
 
     // num of variants
     let len = input.variants.len() as u128;
@@ -33,6 +34,9 @@ pub fn bitfield_specifier_impl(input : ItemEnum) -> Result<TokenStream> {
     // num of bits
     let bit_num = get_bits_needed(len);
 
+    // generate variant in range checks
+    let vari_in_range_check = generate_variant_in_range_run_check(&input, bit_num)?;
+
     let match_variants = input.variants.into_iter().map(|variant| {
         let variant_id = variant.ident;
 
@@ -40,6 +44,8 @@ pub fn bitfield_specifier_impl(input : ItemEnum) -> Result<TokenStream> {
             x if x == (#enum_ident :: #variant_id as u64) => { #enum_ident :: #variant_id }
         )
     });
+
+
 
     let impl_specifier = quote!(
         impl bitfield::Specifier for #enum_ident {
@@ -57,6 +63,10 @@ pub fn bitfield_specifier_impl(input : ItemEnum) -> Result<TokenStream> {
             }
     
             fn to_u64(inp : Self::InOutType) -> u64{
+
+                //check variant range. reduces to no runtime code.
+                #vari_in_range_check
+
                 inp as u64
             }
         }

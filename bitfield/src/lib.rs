@@ -121,4 +121,5 @@ impl Specifier for bool {
     }
 }
 
+
 generate_checks!();
