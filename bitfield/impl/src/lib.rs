@@ -22,7 +22,7 @@ pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
     output.unwrap_or_else(|err| err.to_compile_error()).into()
 }
 
-#[proc_macro_derive(BitfieldSpecifier)]
+#[proc_macro_derive(BitfieldSpecifier)]//, attributes(bits))]
 pub fn derive(input: TokenStream) -> TokenStream {
 
         // parse input as ItemEnum

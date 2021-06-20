@@ -11,13 +11,13 @@ pub mod checks;
 
 pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
 
-    let struct_id = input_struct.ident;
+    let struct_id = &input_struct.ident;
 
-    if let syn::Fields::Named(fields) = input_struct.fields {
+    if let syn::Fields::Named(fields) = &input_struct.fields {
 
-        let fields_iter = fields.named.into_iter();
+        let fields_iter = (&fields.named).into_iter();
 
-        let fields_type_iter = fields_iter.clone().map(|field| { field.ty} );
+        let fields_type_iter = fields_iter.clone().map(|field| { &field.ty} );
 
         //let fields_type_iter_clone = fields_type_iter.clone();
 
@@ -45,13 +45,19 @@ pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
 
         let run_multiple_of_eight_check = checks::generate_multiple_of_eight_run_check(&size)?;
 
+        let run_check_bits_check = checks::generate_check_bits_attri_run_check(&input_struct)?;
 
         //let fields_type_iter2 = fields_type_iter;
 
         let new_func = quote!(
             fn new() -> Self {
+
+                #run_check_bits_check
+
                 #run_multiple_of_eight_check
+
                 let data = [0; #size /8];
+
                 #struct_id {
                     data
                 }
@@ -67,11 +73,11 @@ pub fn bitfield_impl(input_struct : ItemStruct) -> Result<TokenStream> {
 
         for field in fields_iter {
 
-            let field_type = field.ty;
+            let field_type = &field.ty;
 
             end_bit.extend(quote!(+ < #field_type as Specifier>::BITS));
 
-            let field_ident = field.ident.unwrap();
+            let field_ident = field.ident.clone().unwrap();
 
             // create get function for field
             let get_id = format_ident!("get_{}", field_ident);
